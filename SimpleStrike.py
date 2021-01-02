@@ -97,14 +97,14 @@ class Alien(pg.sprite.Sprite):
         self.max_velocity = 5
 
     def update(self):
-        """walk or spin, depending on the monkeys state"""
+        """walk or spin, depending on the alien state"""
         if self.dizzy:
             self._spin()
         else:
             self._walk()
 
     def _changeDirection(self):
-        """spin the monkey image"""
+        """spin the alien image"""
         self.new_direction = self.new_direction + 1
         if self.new_direction >= 5:
             self.new_direction = 0
@@ -170,7 +170,7 @@ def main():
     # Initialize Everything
     pg.init()
     screen = pg.display.set_mode((468,468)) # size of the screen; returns a surface object
-    pg.display.set_caption("Monkey Fever")
+    pg.display.set_caption("Save The Planet")
     pg.mouse.set_visible(0)
 
     # Create The Initial Backgound
@@ -228,7 +228,7 @@ def main():
 
     # Prepare Game Objects
     clock = pg.time.Clock()
-    whiff_sound = load_sound("missed.mp3")
+    whiff_sound = load_sound("gunshot.wav")
     punch_sound = load_sound("gunshot.wav")
     alien = Alien()
     gun = Gun()
