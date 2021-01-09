@@ -77,7 +77,6 @@ class Monster(pg.sprite.Sprite):
             self.kill() # removes monster
 
 
-
 def main():
     """this function is called when the program starts.
        it initializes everything it needs, then runs in
