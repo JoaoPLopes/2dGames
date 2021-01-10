@@ -21,6 +21,14 @@ def load_image(name, colorkey=None):
         image.set_colorkey(colorkey, pg.RLEACCEL)
     return image, image.get_rect()
 
+def load_font(name, size):
+    fullname = os.path.join(data_dir, name)
+    try:
+        font = pg.font.Font(fullname, size)
+    except:
+        font = pg.font.Font(None, size)
+    return font
+
 class Ship(pg.sprite.Sprite):
     def __init__(self):
         pg.sprite.Sprite.__init__(self)  # call Sprite initializer
@@ -30,11 +38,11 @@ class Ship(pg.sprite.Sprite):
         self.xvelocity = 5 # velocity of the space ship
         self.direction = 0 # 1 - to move to the right; -1 - to move to the left; 0 - to stay in the same place
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
-        self.area.width = self.area.width - 200
-        self.area.topleft = (0,0)
         # initial position
         self.rect.bottom  = self.area.bottom
         self.rect.centerx = self.area.centerx
+        self.lives = 3
+        self.pontuation = 0
 
     def update(self):
         self.rect.move_ip(self.direction*self.xvelocity,0)
@@ -51,8 +59,8 @@ class Shot(pg.sprite.Sprite):
         self.yvelocity = -5 # velocity of the shot
         self.xvelocity = 0 # 
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
-        self.area.width = self.area.width - 200
-        self.area.topleft = (0,0)
+        self.area.width = self.area.height - 100
+        self.area.topleft = (0,100)
         self.rect.bottom  = ypos
         self.rect.centerx = xpos
     
@@ -70,17 +78,41 @@ class Monster(pg.sprite.Sprite):
         self.yvelocity = 1 # velocity of the moster
         self.xvelocity = 0
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
-        self.area.width = self.area.width - 200
-        self.area.topleft = (0,0)
-        self.rect.topleft = random.randrange(0,self.area.right-50), 0 # Initial position ; x coordinate is random, y is 0
+        self.area.height = self.area.height - 100
+        self.area.topleft = (0,100)
+        self.rect.topleft = random.randrange(0,self.area.right-50), 100 # Initial position ; x coordinate is random, y is 0
         self.hit = 0
     
     def update(self):
         self.rect.move_ip(0,self.yvelocity)
-        if not self.area.contains(self.rect): # if reaches final of the screen dies
-            self.kill() # Kill removes sprit from all groups
-        if self.hit:
-            self.kill() # removes monster
+
+
+def draw_pontuation(surf, count, lives, x , y):
+    
+    font = pg.font.Font(None, 24)
+    message = "Score < " + str(count) + " >"
+    text = font.render(message, 1, (255, 255, 255), (0, 0, 255)) #render(text, antialias, color, background=None)
+    textpos = text.get_rect(left = x , centery = y) # centra ao meio do ecra
+    surf.blit(text, textpos) # bilt Draws a source Surface onto this Surface
+
+    message = "Lives < " + str(lives) + " >"
+    text = font.render(message, 1, (255, 255, 255), (0, 0, 255)) #render(text, antialias, color, background=None)
+    textpos = text.get_rect(right = 468-90 , centery = y) # centra ao meio do ecra
+    surf.blit(text, textpos) # bilt Draws a source Surface onto this Surface
+
+def check_collision(invaders, ship, allshots):
+
+    for monster in invaders: # check colision between shot an monster
+        if not monster.area.contains(monster.rect): # if reaches final of the screen dies
+            monster.kill() # Kill removes sprit from all groups
+            ship.sprites()[0].lives -= 1
+        if [] != pg.sprite.spritecollide(monster, allshots, True):
+            monster.kill()
+            ship.sprites()[0].pontuation += 1
+        
+    if [] != pg.sprite.spritecollide(ship.sprites()[0], invaders, True):
+        ship.sprites()[0].lives -= 1
+
 
 
 def main():
@@ -89,12 +121,12 @@ def main():
        a loop until the function returns."""
     # Initialize Everything
     pg.init()
-    screen = pg.display.set_mode((668,468)) # size of the screen; returns a surface object
+    screen = pg.display.set_mode((468,568)) # size of the screen; returns a surface object
     pg.display.set_caption("Space Invaders")
     pg.mouse.set_visible(0)
 
     # Create The Game Backgound
-    background = pg.Surface((468,468))
+    background = pg.Surface((468,568))
     background = background.convert()
     background.fill((0, 0, 0)) #set color (rgb)
     
@@ -102,21 +134,14 @@ def main():
     screen.blit(background, (0, 0))
     pg.display.flip()
 
-    # Create The Pontuation Backgound
-    pontuationbackground = pg.Surface((200,468))
-    pontuationbackground = pontuationbackground.convert()
-    pontuationbackground.fill((255, 255, 255)) #set color (rgb)
-
-    # Put Text On The Pontuation Background
+    # Put Text On The Background
     if pg.font:
-        font = pg.font.Font(None, 36)
-        text = font.render("Space Invaders", 1, (250, 0, 0)) #render(text, antialias, color, background=None)
-        textpos = text.get_rect(centerx=pontuationbackground.get_width() / 2) # centra ao meio do ecra
-        pontuationbackground.blit(text, textpos) # bilt Draws a source Surface onto this Surface.
+        font = load_font("BigSpace.ttf", 36)
+        text = font.render("Space Invaders", 1, (250, 255, 255), (0, 0, 0)) #render(text, antialias, color, background=None)
+        textpos = text.get_rect(centerx=background.get_width() / 2, y=0) # centra ao meio do ecra
+        background.blit(text, textpos) # bilt Draws a source Surface onto this Surface.
 
-    # Display The Background
-    screen.blit(pontuationbackground, (468, 0))
-    pg.display.flip()
+    pg.draw.rect(background, (0, 0, 255), pg.Rect(80, 40, background.get_width()-80*2, 40))
 
     # Prepare Game Objects
     clock = pg.time.Clock()
@@ -133,7 +158,7 @@ def main():
 
     # Main loop
     going = True
-    
+
     while(going):
         clock.tick(60)
 
@@ -159,11 +184,12 @@ def main():
         invaders.update()
         ship.update()
 
-        for monster in invaders: # check colision between shot an monster
-            if [] != pg.sprite.spritecollide(monster, allshots, True):
-                monster.hit = 1
-            if [] != pg.sprite.spritecollide(monster, ship, False):
-                going = False
+        check_collision(invaders, ship, allshots)
+
+        if ship.sprites()[0].lives < 1: # End game
+            going = 0
+
+        draw_pontuation(background, ship.sprites()[0].pontuation, ship.sprites()[0].lives, 90, 60)
 
         # Draw Everything
         screen.blit(background, (0, 0))
