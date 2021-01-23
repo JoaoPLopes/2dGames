@@ -30,18 +30,29 @@ class Pipe(pg.sprite.Sprite):
         self.xvelocity = -1
         self.rect = self.image.get_rect()
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
-        self.rect.topleft = (self.area.width, 200 + random.randrange(0,300)) # initial position
 
     def update(self):
         self.rect.move_ip(self.xvelocity,0)
         if self.rect.right < 0:
             self.kill()
 
+class BottomPipe(Pipe):
+    def __init__(self, yPos):
+        Pipe.__init__(self)
+        self.rect.topleft = (self.area.width, yPos) # initial position
+
+class TopPipe(Pipe):
+    def __init__(self, yPos):
+        Pipe.__init__(self)
+        rotate = pg.transform.rotate
+        self.image = rotate(self.image, -180)
+        self.rect.bottomleft = (self.area.width, yPos) # initial position
+
 class Bird(pg.sprite.Sprite):
     def __init__(self):
         pg.sprite.Sprite.__init__(self) # call Sprite initializar
         self.image, self.rect = load_image("FlappyBird.png",-1)
-        self.image = pg.transform.scale(self.image, (50,50))
+        self.image = pg.transform.scale(self.image, (40,40))
         rotate = pg.transform.rotate
         self.original = rotate(self.image, 45)
         self.rect = self.image.get_rect()
@@ -52,7 +63,7 @@ class Bird(pg.sprite.Sprite):
         self.terminalVelocity = 400 # pixeis por segundo
         self.yvelocity = 0 # velocity of the bird
         self.jumping = 0
-        self.jump = -10 # pixeis
+        self.jump = -8 # pixeis
 
     
     def update(self):
@@ -134,7 +145,9 @@ def main():
 
     bird = pg.sprite.RenderPlain(Bird())
 
-    pipe = pg.sprite.RenderPlain(Pipe())
+    yPos =  200 + random.randrange(0,300)
+    
+    pipe = pg.sprite.RenderPlain(BottomPipe(yPos), TopPipe(yPos-150))
 
     pause = 0
 
@@ -176,7 +189,8 @@ def main():
             elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
                 going = False
             elif event.type == newPipe:
-                pipe.add(Pipe())
+                yPos =  200 + random.randrange(0,300)
+                pipe.add(BottomPipe(yPos), TopPipe(yPos-150))
             
         # To be able to move while pressing key continously seperate from new events loop  
         keys = pg.key.get_pressed()
@@ -195,8 +209,8 @@ def main():
         # Draw Everything
         screen.blit(background, (0, 0)) # always draw background to "erase" previous frame
 
-        pg.draw.rect(screen, (0,0,0), pipe.sprites()[0].rect)
-        pg.draw.rect(screen, (0,0,0), bird.sprites()[0].rect)
+        #pg.draw.rect(screen, (0,0,0), pipe.sprites()[0].rect)
+        #pg.draw.rect(screen, (0,0,0), bird.sprites()[0].rect)
         bird.draw(screen)
         pipe.draw(screen)
 
