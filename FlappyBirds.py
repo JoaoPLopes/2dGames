@@ -26,7 +26,8 @@ class Pipe(pg.sprite.Sprite):
     def __init__(self):
         pg.sprite.Sprite.__init__(self)   
         self.image, self.rect = load_image("pipe.png",-1)
-        self.image = pg.transform.scale(self.image, (80,600))
+        self.image = pg.transform.scale(self.image, (85,500))
+        self.mask = pg.mask.from_surface(self.image)
         self.xvelocity = -1
         self.rect = self.image.get_rect()
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
@@ -52,18 +53,19 @@ class Bird(pg.sprite.Sprite):
     def __init__(self):
         pg.sprite.Sprite.__init__(self) # call Sprite initializar
         self.image, self.rect = load_image("FlappyBird.png",-1)
-        self.image = pg.transform.scale(self.image, (40,40))
+        self.image = pg.transform.scale(self.image, (45,45))
         rotate = pg.transform.rotate
         self.original = rotate(self.image, 45)
         self.rect = self.image.get_rect()
+        self.mask = pg.mask.from_surface(self.image)
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
         self.rect.topleft = (self.area.width/2-150,200) # initial position
-        self.samplingTime = 1/60 # update 60 times per second
-        self.acceleartion = 600 # pixeis/s^-2
+        self.samplingTime = 1/120 # update 60 times per second
+        self.acceleartion = 480 # pixeis/s^-2
         self.terminalVelocity = 400 # pixeis por segundo
         self.yvelocity = 0 # velocity of the bird
         self.jumping = 0
-        self.jump = -8 # pixeis
+        self.jump = -600 # pixeis
 
     
     def update(self):
@@ -77,149 +79,154 @@ class Bird(pg.sprite.Sprite):
             self.yvelocity = self.yvelocity + self.samplingTime*self.acceleartion
             rotate = pg.transform.rotate
             self.image = rotate(self.original, -135*self.yvelocity/self.terminalVelocity)
+            self.mask = pg.mask.from_surface(self.image) # A new mask needs to be recreated each time a sprite's image is changed
         self.rect.move_ip(0,self.samplingTime*self.yvelocity) # move x pixeis
         if self.rect.bottom > self.area.bottom:
             self.kill() # Kill removes sprit from all groups
 
     def _jump(self):
         self.image = self.original
+        self.mask = pg.mask.from_surface(self.image) # new mask from new image     
         self.yvelocity = 0
         self.jumping = 0
         #rotate = pg.transform.rotate
         #self.image = rotate(self.image, 0)
-        self.rect.move_ip(0,self.jump) # move x pixeis
+        self.rect.move_ip(0,self.samplingTime*self.jump) # move x pixeis
 
 
-def draw_pause():
+class Game():
+    def __init__(self):
+        self.screen = pg.display.set_mode((480,650)) # size of the screen; returns a surface object
+        pg.display.set_caption("Flappy Birds")
+        pg.mouse.set_visible(0)
 
-    # Create The Game Backgound
-    background = pg.Surface((480,600))
-    background = background.convert()
+        # Create The Game Backgound
+        self.background = pg.Surface((480,650))
+        self.background = self.background.convert()
+        #background.fill((0,255,0))
 
-    image, rect = load_image("FlappyBirdBackground.png")
-    pos = image.get_rect(centerx=background.get_width() / 2, centery=background.get_height()/2)
-    background.blit(image,pos)  
+        image, rect = load_image("FlappyBirdBackground.png")
+        pos = image.get_rect(centerx=self.background.get_width() / 2, centery=self.background.get_height()/2)
+        self.background.blit(image,pos)  
 
-    # Put Text On The Background, Centered
-    if pg.font:
-        font = pg.font.Font(None, 36)
-        text = font.render("Press c to restart", 1, (10, 10, 10)) #render(text, antialias, color, background=None)
-        textpos = text.get_rect(centerx=background.get_width() / 2) # centra ao meio do ecra
-        background.blit(text, textpos) # bilt Draws a source Surface onto this Surface.
+        # Display The Background
+        self.screen.blit(self.background, (0, 0))
+        pg.display.flip()
 
-    return background
+
+        # Prepare Game Objects
+        self.clock = pg.time.Clock()
+
+        self.bird = pg.sprite.RenderPlain(Bird())
+
+        yPos =  200 + random.randrange(0,300)
         
-def check_collision(pipes, bird):
+        self.pipe = pg.sprite.RenderPlain(BottomPipe(yPos), TopPipe(yPos-150))
 
-    for pipe in pipes: # check colision between bird and all pipes
-        if [] != pg.sprite.spritecollide(pipe, bird, True):
-            pipe.kill() 
+        self.pause = 0
 
-def main(): 
-    """this function is called when the program starts.
-       it initializes everything it needs, then runs in
-       a loop until the function returns."""
+        # Create Events
+        self.newPipe = pg.USEREVENT + 1
+        pg.time.set_timer(self.newPipe,4800) # 1000 miliseconds = 1 seconds
 
-    # Initialize Everything
-    pg.init()
-    screen = pg.display.set_mode((480,600)) # size of the screen; returns a surface object
-    pg.display.set_caption("Flappy Birds")
-    pg.mouse.set_visible(0)
+        self.going = True
 
-    # Create The Game Backgound
-    background = pg.Surface((480,600))
-    background = background.convert()
-    #background.fill((0,255,0))
+    def run(self):
 
-    image, rect = load_image("FlappyBirdBackground.png")
-    pos = image.get_rect(centerx=background.get_width() / 2, centery=background.get_height()/2)
-    background.blit(image,pos)  
+        while(self.going):
+            self.clock.tick(120)
 
-    # Display The Background
-    screen.blit(background, (0, 0))
-    pg.display.flip()
+            if self.pause == 1:
+                self.__pause()
 
-
-    # Prepare Game Objects
-    clock = pg.time.Clock()
-
-    bird = pg.sprite.RenderPlain(Bird())
-
-    yPos =  200 + random.randrange(0,300)
-    
-    pipe = pg.sprite.RenderPlain(BottomPipe(yPos), TopPipe(yPos-150))
-
-    pause = 0
-
-
-    # Create Events
-    newPipe = pg.USEREVENT + 1
-    pg.time.set_timer(newPipe,4800) # 1000 miliseconds = 1 seconds
-
-    going = True
-    while(going):
-        clock.tick(60)
-
-        while(pause==1): # PAUSING MENU; After the bird being killed
-            pauseBackground = draw_pause()
-            
-            for sprite in pipe.sprites():
-                sprite.kill()
-            
+            # Handle Input Events
             for event in pg.event.get():
                 if event.type == pg.QUIT:
-                    pause = 0
-                    going = False
+                    self.going = False
                 elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
-                    pause = 0
-                    going = False
-                elif event.type == pg.KEYDOWN and event.key == pg.K_c: # press "c" to continue
-                    bird.add(Bird())
-                    pause = 0
+                    self.going = False
+                elif event.type == self.newPipe:
+                    yPos =  200 + random.randrange(0,300)
+                    self.pipe.add(BottomPipe(yPos), TopPipe(yPos-135))
+                
+            # To be able to move while pressing key continously seperate from new events loop  
+            keys = pg.key.get_pressed()
+            if keys[pg.K_SPACE]:
+                self.bird.sprites()[0].jumping = 1
 
-            
+            # Update Sprites
+            self.pipe.update()
+            self.bird.update()
+
+            self.__check_collision()
+
+            if self.bird.sprites() == []:
+                self.pause = 1
+
             # Draw Everything
-            screen.blit(pauseBackground, (0, 0)) # always draw background to "erase" previous frame
+            self.screen.blit(self.background, (0, 0)) # always draw background to "erase" previous frame
+
+            self.bird.draw(self.screen)
+            self.pipe.draw(self.screen)
+
             pg.display.flip()
 
-        # Handle Input Events
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                going = False
-            elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
-                going = False
-            elif event.type == newPipe:
-                yPos =  200 + random.randrange(0,300)
-                pipe.add(BottomPipe(yPos), TopPipe(yPos-150))
-            
-        # To be able to move while pressing key continously seperate from new events loop  
-        keys = pg.key.get_pressed()
-        if keys[pg.K_SPACE]:
-            bird.sprites()[0].jumping = 1
 
-        # Update Sprites
-        pipe.update()
-        bird.update()
+    def __pause(self):
+        while(self.pause==1): # PAUSING MENU; After the bird being killed
+            self.pauseBackground = self.__draw_pause()
+                
+            for sprite in self.pipe.sprites():
+                sprite.kill()
+                
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    self.pause = 0
+                    self.going = False
+                elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+                    self.pause = 0
+                    self.going = False
+                elif event.type == pg.KEYDOWN and event.key == pg.K_c: # press "c" to continue
+                    self.bird.add(Bird())
+                    self.pause = 0
 
-        check_collision(pipe,bird)
+                
+            # Draw Everything
+            self.screen.blit(self.pauseBackground, (0, 0)) # always draw background to "erase" previous frame
+            pg.display.flip()
 
-        if bird.sprites() == []:
-            pause = 1
+    @staticmethod 
+    def __draw_pause():
 
-        # Draw Everything
-        screen.blit(background, (0, 0)) # always draw background to "erase" previous frame
+        # Create The Game Backgound
+        background = pg.Surface((480,650))
+        background = background.convert()
 
-        #pg.draw.rect(screen, (0,0,0), pipe.sprites()[0].rect)
-        #pg.draw.rect(screen, (0,0,0), bird.sprites()[0].rect)
-        bird.draw(screen)
-        pipe.draw(screen)
+        image, rect = load_image("FlappyBirdBackground.png")
+        pos = image.get_rect(centerx=background.get_width() / 2, centery=background.get_height()/2)
+        background.blit(image,pos)  
 
-        pg.display.flip()
-    
-    pg.quit()
+        # Put Text On The Background, Centered
+        if pg.font:
+            font = pg.font.Font(None, 36)
+            text = font.render("Press c to restart", 1, (10, 10, 10)) #render(text, antialias, color, background=None)
+            textpos = text.get_rect(centerx=background.get_width() / 2) # centra ao meio do ecra
+            background.blit(text, textpos) # bilt Draws a source Surface onto this Surface.
+
+        return background   
+
+    def __check_collision(self):
+
+        for p in self.pipe: # check colision between bird and all pipes
+            if [] != pg.sprite.spritecollide(p, self.bird, True, pg.sprite.collide_mask):
+                p.kill()
+     
 
 
 
 # this calls the 'main' function when this script is executed
 if __name__ == "__main__":
-    main()
+    pg.init()
+    game = Game()
+    game.run()
+    pg.quit()
