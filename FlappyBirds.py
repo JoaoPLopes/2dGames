@@ -2,6 +2,7 @@ import os
 import pygame as pg
 from pygame.compat import geterror
 import random
+import numpy as np
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 data_dir = os.path.join(main_dir, "data")
@@ -21,21 +22,30 @@ def load_image(name, colorkey=None):
         image.set_colorkey(colorkey, pg.RLEACCEL)
     return image, image.get_rect()
 
+def load_font(name, size):
+    fullname = os.path.join(data_dir, name)
+    try:
+        font = pg.font.Font(fullname, size)
+    except:
+        font = pg.font.Font(None, size)
+    return font
 
 class Pipe(pg.sprite.Sprite):
     def __init__(self):
         pg.sprite.Sprite.__init__(self)   
-        self.image, self.rect = load_image("pipe.png",-1)
+        self.image, self.rect = load_image("pipe.png")
         self.image = pg.transform.scale(self.image, (85,500))
         self.mask = pg.mask.from_surface(self.image)
-        self.xvelocity = -1
+        self.xvelocity = -2
         self.rect = self.image.get_rect()
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
+        self.overpast = 0
 
     def update(self):
-        self.rect.move_ip(self.xvelocity,0)
+        self.rect.move_ip(self.xvelocity,0) # moves tree pixeis in one frame
         if self.rect.right < 0:
             self.kill()
+        self.move = 1
 
 class BottomPipe(Pipe):
     def __init__(self, yPos):
@@ -50,18 +60,19 @@ class TopPipe(Pipe):
         self.rect.bottomleft = (self.area.width, yPos) # initial position
 
 class Bird(pg.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, fps):
         pg.sprite.Sprite.__init__(self) # call Sprite initializar
         self.image, self.rect = load_image("FlappyBird.png",-1)
-        self.image = pg.transform.scale(self.image, (45,45))
+        self.initialRotation = 15 # Rotation when the bird jumps; 15 degrees upwards
+        self.image = pg.transform.scale(self.image, (55,45))
         rotate = pg.transform.rotate
-        self.original = rotate(self.image, 45)
+        self.original = rotate(self.image, self.initialRotation)
         self.rect = self.image.get_rect()
         self.mask = pg.mask.from_surface(self.image)
         self.area = pg.display.get_surface().get_rect() # get area of the game screen
-        self.rect.topleft = (self.area.width/2-150,200) # initial position
-        self.samplingTime = 1/120 # update 60 times per second
-        self.acceleartion = 480 # pixeis/s^-2
+        self.rect.topright = (self.area.width/2,200) # initial position
+        self.samplingTime = 1/fps # update 120 times per second
+        self.acceleartion = 680 # pixeis/s^-2
         self.terminalVelocity = 400 # pixeis por segundo
         self.yvelocity = 0 # velocity of the bird
         self.jumping = 0
@@ -77,8 +88,12 @@ class Bird(pg.sprite.Sprite):
     def _fall(self):
         if self.yvelocity < self.terminalVelocity:
             self.yvelocity = self.yvelocity + self.samplingTime*self.acceleartion
-            rotate = pg.transform.rotate
-            self.image = rotate(self.original, -135*self.yvelocity/self.terminalVelocity)
+            delta = 200 # to make te bird keep its orientation before starting to bilt
+            if self.yvelocity < delta:
+                pass
+            else:
+                rotate = pg.transform.rotate
+                self.image = rotate(self.original, -(90+self.initialRotation)*(self.yvelocity-delta)/(self.terminalVelocity-delta))
             self.mask = pg.mask.from_surface(self.image) # A new mask needs to be recreated each time a sprite's image is changed
         self.rect.move_ip(0,self.samplingTime*self.yvelocity) # move x pixeis
         if self.rect.bottom > self.area.bottom:
@@ -96,17 +111,18 @@ class Bird(pg.sprite.Sprite):
 
 class Game():
     def __init__(self):
-        self.screen = pg.display.set_mode((480,650)) # size of the screen; returns a surface object
+        self.screen = pg.display.set_mode((525,700)) # size of the screen; returns a surface object
         pg.display.set_caption("Flappy Birds")
         pg.mouse.set_visible(0)
 
         # Create The Game Backgound
-        self.background = pg.Surface((480,650))
+        self.background = pg.Surface((525,700))
         self.background = self.background.convert()
         #background.fill((0,255,0))
 
         image, rect = load_image("FlappyBirdBackground.png")
-        pos = image.get_rect(centerx=self.background.get_width() / 2, centery=self.background.get_height()/2)
+        pos = image.get_rect(top = 0 , left = 0)
+        image = pg.transform.scale(image, (525,700))
         self.background.blit(image,pos)  
 
         # Display The Background
@@ -116,8 +132,9 @@ class Game():
 
         # Prepare Game Objects
         self.clock = pg.time.Clock()
+        self.fps = 120 # frames per second
 
-        self.bird = pg.sprite.RenderPlain(Bird())
+        self.bird = pg.sprite.RenderPlain(Bird(self.fps))
 
         yPos =  200 + random.randrange(0,300)
         
@@ -127,14 +144,20 @@ class Game():
 
         # Create Events
         self.newPipe = pg.USEREVENT + 1
-        pg.time.set_timer(self.newPipe,4800) # 1000 miliseconds = 1 seconds
+        pg.time.set_timer(self.newPipe,1400) # 1000 miliseconds = 1 seconds
 
         self.going = True
+        self.score = 0
 
     def run(self):
 
         while(self.going):
-            self.clock.tick(120)
+            self.clock.tick(self.fps)
+
+            self.__check_collision()
+
+            if self.bird.sprites() == []:
+                self.pause = 1
 
             if self.pause == 1:
                 self.__pause()
@@ -146,7 +169,7 @@ class Game():
                 elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
                     self.going = False
                 elif event.type == self.newPipe:
-                    yPos =  200 + random.randrange(0,300)
+                    yPos =  random.randint(np.round(self.screen.get_rect().height/3), np.round(2*self.screen.get_rect().height/3))
                     self.pipe.add(BottomPipe(yPos), TopPipe(yPos-135))
                 
             # To be able to move while pressing key continously seperate from new events loop  
@@ -158,21 +181,19 @@ class Game():
             self.pipe.update()
             self.bird.update()
 
-            self.__check_collision()
-
-            if self.bird.sprites() == []:
-                self.pause = 1
-
             # Draw Everything
             self.screen.blit(self.background, (0, 0)) # always draw background to "erase" previous frame
 
             self.bird.draw(self.screen)
             self.pipe.draw(self.screen)
+            
+            self.__draw_score()
 
             pg.display.flip()
 
 
     def __pause(self):
+        self.score = 0
         while(self.pause==1): # PAUSING MENU; After the bird being killed
             self.pauseBackground = self.__draw_pause()
                 
@@ -187,9 +208,8 @@ class Game():
                     self.pause = 0
                     self.going = False
                 elif event.type == pg.KEYDOWN and event.key == pg.K_c: # press "c" to continue
-                    self.bird.add(Bird())
+                    self.bird.add(Bird(self.fps))
                     self.pause = 0
-
                 
             # Draw Everything
             self.screen.blit(self.pauseBackground, (0, 0)) # always draw background to "erase" previous frame
@@ -199,11 +219,12 @@ class Game():
     def __draw_pause():
 
         # Create The Game Backgound
-        background = pg.Surface((480,650))
+        background = pg.Surface((525,700))
         background = background.convert()
 
         image, rect = load_image("FlappyBirdBackground.png")
-        pos = image.get_rect(centerx=background.get_width() / 2, centery=background.get_height()/2)
+        image = pg.transform.scale(image, (525,700))
+        pos = image.get_rect(top = 0 , left = 0)
         background.blit(image,pos)  
 
         # Put Text On The Background, Centered
@@ -220,6 +241,25 @@ class Game():
         for p in self.pipe: # check colision between bird and all pipes
             if [] != pg.sprite.spritecollide(p, self.bird, True, pg.sprite.collide_mask):
                 p.kill()
+
+
+    def __draw_score(self):
+        
+        if self.pipe.sprites() != []:
+            if self.pipe.sprites()[0].overpast == 0:
+                if self.pipe.sprites()[0].rect.right < self.bird.sprites()[0].rect.left:
+                    self.score +=1
+                    self.pipe.sprites()[0].overpast = 1
+
+        x = self.background.get_rect().centerx
+        y = 100
+
+        font = load_font("FlappyBirdy.ttf", 106)
+        score = str(self.score)
+        text = font.render(score,  1, (255, 255, 255)) #render(text, antialias, color, background=None)
+        textpos = text.get_rect(left = x , centery = y) # centra ao meio do ecra
+        self.screen.blit(text, textpos) # bilt Draws a source Surface onto this Surface
+
      
 
 
