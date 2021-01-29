@@ -11,7 +11,7 @@ base_image = "base.png"
 BASE_YPOS = 600
 
 bird_image = "FlappyBird.png"
-BIRD_WIDHT = 55
+BIRD_WIDHT = 50 #55
 BIRD_HEIGHT = 45
 
 background_imgae = "FlappyBirdBackground.png"
