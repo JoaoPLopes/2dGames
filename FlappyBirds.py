@@ -3,12 +3,13 @@ from pygame.compat import geterror
 import random
 import numpy as np
 from LoadData import *
+import pickle
 
 SCREEN_WIDHT = 525
 SCREEN_HEIGHT = 700
 
 base_image = "base.png"
-BASE_YPOS = 600 #22
+BASE_YPOS = 600 
 
 bird_image = "FlappyBird.png"
 BIRD_WIDHT = 55
@@ -83,7 +84,7 @@ class Bird(pg.sprite.Sprite):
                 self.image = rotate(self.original, -(90+self.initialRotation)*(self.yvelocity-delta)/(self.terminalVelocity-delta))
             self.mask = pg.mask.from_surface(self.image) # A new mask needs to be recreated each time a sprite's image is changed
         self.rect.move_ip(0,self.samplingTime*self.yvelocity) # move x pixeis
-        if self.rect.bottom > self.area.bottom:
+        if self.rect.bottom > BASE_YPOS:
             self.kill() # Kill removes sprit from all groups
 
     def _jump(self):
@@ -113,6 +114,11 @@ class Game():
         self.screen.blit(self.background, (0, 0))
         pg.display.flip()
 
+        # Load Image Of The Base And Set Its Inital Position
+        self.baseImage = load_image(base_image)[0]
+        self.baseImage = pg.transform.scale(self.baseImage, (SCREEN_WIDHT,112))
+        self.basePos = 0
+
 
         # Prepare Game Objects
         self.font = load_font("FlappyBirdy.ttf",36)
@@ -125,18 +131,23 @@ class Game():
         self.bird = pg.sprite.RenderPlain(Bird(self.fps))
 
         yPos =  random.randint(np.round(SCREEN_HEIGHT/3), np.round(2*SCREEN_HEIGHT/3)) # places middle of the pipe between 1/3 and 2/3 of the screen
-        self.pipe = pg.sprite.RenderPlain(Pipe(yPos, "BOTTOM_PIPE"), Pipe(yPos-135, "TOP_PIPE"))
-
-        self.pause = 0
+        self.pipe = pg.sprite.RenderPlain()
 
         # Create Events
         # NEW PIPE EVENT (A NEW PIPE COMES EVERY X MILLISECONDS)
         self.newPipe = pg.USEREVENT + 1
-        pg.time.set_timer(self.newPipe,1400) # 1000 miliseconds = 1 seconds
+        self.pipeTimer = 3000 # milliseconds
+        pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
 
         # Create Game stats and flags
         self.going = True
         self.score = 0
+        self.pause = 1
+        try:
+            self.bestScore = pickle.load(open("bestScore.pickle", "rb"))["best"]
+        except:
+            self.bestScore = 0
+            pickle.dump({"best": self.bestScore}, open("bestScore.pickle", "wb"))
 
     def run(self):
 
@@ -147,6 +158,8 @@ class Game():
 
             if self.bird.sprites() == []: # If bird dies after collision enter pause menu
                 self.pause = 1
+            
+            if self.pause == 1:
                 self.__pause()
 
             # Handle Input Events
@@ -158,6 +171,9 @@ class Game():
                 elif event.type == self.newPipe:
                     yPos =  random.randint(np.round(SCREEN_HEIGHT/3), np.round(2*SCREEN_HEIGHT/3)) # places middle of the pipe between 1/3 and 2/3 of the screen
                     self.pipe.add(Pipe(yPos, "BOTTOM_PIPE"), Pipe(yPos-135, "TOP_PIPE"))
+                    if self.pipeTimer == 3000: # First pipe come after 3 seconds. But after the firt all come after 1.4 seconds
+                        self.pipeTimer = 1400 #  millisenconds (changing the timer after the first pipe was released)
+                        pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
 
             # To be able to move while pressing key continously seperate from new events loop  
             keys = pg.key.get_pressed()
@@ -165,8 +181,8 @@ class Game():
                 self.bird.sprites()[0].jumping = 1
 
             # Update Sprites
-            self.pipe.update()
             self.bird.update()
+            self.pipe.update()
 
             # Draw Everything
             self.screen.blit(self.background, (0, 0)) # always draw background to "erase" previous frame
@@ -174,27 +190,35 @@ class Game():
             self.bird.draw(self.screen)
             self.pipe.draw(self.screen)
             
-            self.__draw_score()
             self.__draw_base()
+            self.__draw_score()
 
             pg.display.flip()
 
 
     def __pause(self):
+        if self.score > self.bestScore:
+            self.bestScore = self.score
+            pickle.dump({"best": self.bestScore}, open("bestScore.pickle", "wb"))
+        
         self.score = 0
-            
+        self.basePos = 0 # Reset position of the base to zero
+
         # Draw Everything
         self.screen.blit(self.background, (0, 0)) # always draw background to "erase" previous frame
             
-        text = self.font.render("Press c to restart", 1, (10, 10, 10)) #render(text, antialias, color, background=None)
-        textpos = text.get_rect(centerx=SCREEN_WIDHT / 2, centery = SCREEN_HEIGHT / 2 ) # centra ao meio do ecra
-        self.screen.blit(text, textpos) # bilt Draws a source Surface onto this Surface.    
-            
+        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2), "Press c to play", (10, 10, 10), self.font)
+
+        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2 + 50), "Best = "+ str(self.bestScore), (10, 10, 10), self.font)
+
         self.__draw_base()
             
         pg.display.flip()
         while(self.pause==1): # PAUSING MENU; After the bird being killed                
-            for sprite in self.pipe.sprites():
+            for sprite in self.pipe.sprites(): # Kill existing pipes
+                sprite.kill()
+            
+            for sprite in self.bird.sprites(): # Kill exinsting bird
                 sprite.kill()
                 
             for event in pg.event.get():
@@ -206,7 +230,11 @@ class Game():
                     self.going = False
                 elif event.type == pg.KEYDOWN and event.key == pg.K_c: # press "c" to continue
                     self.bird.add(Bird(self.fps))
+                    self.pipeTimer = 3000 #  millisenconds
+                    pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
                     self.pause = 0
+                elif event.type == self.newPipe:
+                    pass
 
     def __check_collision(self):
 
@@ -216,25 +244,55 @@ class Game():
 
 
     def __draw_score(self):
-        if self.pipe.sprites() != []:
+        if self.pipe.sprites() != [] and self.bird != []:
             if self.pipe.sprites()[0].overpast == 0:
                 if self.pipe.sprites()[0].rect.right < self.bird.sprites()[0].rect.left:
                     self.score +=1
                     self.pipe.sprites()[0].overpast = 1
 
-        x = SCREEN_WIDHT/2
-        y = 100
 
-        score = str(self.score)
-        text = self.scoreFont.render(score,  1, (255, 255, 255)) # render(text, antialias, color, background=None)
-        textpos = text.get_rect(left = x , centery = y) # centra ao meio do ecra
-        self.screen.blit(text, textpos) # bilt Draws a source Surface onto this Surface
+        self.__write_text((SCREEN_WIDHT/2, 100), str(self.score),(255,255,255), self.scoreFont)
 
     def __draw_base(self):
-        image = load_image(base_image)[0]
-        image = pg.transform.scale(image, (SCREEN_WIDHT,112))
-        pos = image.get_rect(top = BASE_YPOS , left = 0)
-        self.screen.blit(image,pos)
+        """ private method that draws the moving base in the screen;
+            the moving efect is achieved by moving the place where the figure is 
+            drawn every frame. To have a base covering the entire screen game 
+            two images are placed one after the other. When the position of the first reaches 
+            2 times the screen width then starts drawing again at zero
+        Parameters
+        ----------
+        """
+        self.basePos -= 2
+        pos = self.baseImage.get_rect(top = BASE_YPOS , left = self.basePos)
+        if pos[0] < -SCREEN_WIDHT:
+            pos[0] = 0
+            self.basePos = 0
+        
+        self.screen.blit(self.baseImage,pos)
+
+        pos = self.baseImage.get_rect(top = BASE_YPOS , left = self.basePos + SCREEN_WIDHT) 
+        self.screen.blit(self.baseImage,pos)
+
+
+    def __write_text(self, pos, text, color, font):
+        """ private method intended to write text on the screen
+        pos = (x, y)  Is the central coordinates to place the text
+        
+        Parameters
+        ----------
+        pos : (int,int)
+            The central coordinates where to place the text
+        text : str
+            The text to write; must be a single line
+        color: (int,int,int)
+            The color of the text in RGB
+        font: pg.Font
+            The font with wich the text is written 
+        """
+        text = font.render(text, 1, color) #render(text, antialias, color, background=None)
+        textpos = text.get_rect(centerx=pos[0], centery = pos[1] ) # centra ao meio do ecra
+        self.screen.blit(text, textpos) # bilt Draws a source Surface onto this Surface.s
+
 
 
 
