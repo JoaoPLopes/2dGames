@@ -8,7 +8,7 @@ SCREEN_WIDHT = 525
 SCREEN_HEIGHT = 700
 
 base_image = "base.png"
-BASE_YPOS = 600
+BASE_YPOS = 600 #22
 
 bird_image = "FlappyBird.png"
 BIRD_WIDHT = 55
