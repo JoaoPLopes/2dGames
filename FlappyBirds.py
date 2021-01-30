@@ -4,6 +4,7 @@ import random
 import numpy as np
 from LoadData import *
 import pickle
+import Controller as cnt
 
 SCREEN_WIDHT = 525
 SCREEN_HEIGHT = 700
@@ -20,6 +21,7 @@ background_imgae = "FlappyBirdBackground.png"
 pipe_image = "pipe.png"
 PIPE_WIDHT = 85
 PIPE_HEIGHT = 500
+GAP = 130
 
 FPS = 120 # Game Frame rate [fps]
 
@@ -130,19 +132,25 @@ class Game():
 
         self.bird = pg.sprite.RenderPlain(Bird(self.fps))
 
-        yPos =  random.randint(np.round(SCREEN_HEIGHT/3), np.round(2*SCREEN_HEIGHT/3)) # places middle of the pipe between 1/3 and 2/3 of the screen
         self.pipe = pg.sprite.RenderPlain()
 
         # Create Events
         # NEW PIPE EVENT (A NEW PIPE COMES EVERY X MILLISECONDS)
         self.newPipe = pg.USEREVENT + 1
-        self.pipeTimer = 3000 # milliseconds
+        self.pipeTimer = 0 # milliseconds (Initialized with zero to only trigger the interruption after the player starts playing (see __pause() , the game starts there))
         pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
 
         # Create Game stats and flags
         self.going = True
         self.score = 0
         self.pause = 1
+        self.playing = 1
+        
+        # Controller Variables
+        self.ref = SCREEN_HEIGHT/2
+        self.pos = self.bird.sprites()[0].rect.centery
+        self.controller = cnt.Controller(-1)
+
         try:
             self.bestScore = pickle.load(open("bestScore.pickle", "rb"))["best"]
         except:
@@ -170,15 +178,25 @@ class Game():
                     self.going = False
                 elif event.type == self.newPipe:
                     yPos =  random.randint(np.round(SCREEN_HEIGHT/3), np.round(2*SCREEN_HEIGHT/3)) # places middle of the pipe between 1/3 and 2/3 of the screen
-                    self.pipe.add(Pipe(yPos, "BOTTOM_PIPE"), Pipe(yPos-135, "TOP_PIPE"))
+                    self.pipe.add(Pipe(yPos, "BOTTOM_PIPE"), Pipe(yPos-GAP, "TOP_PIPE"))
                     if self.pipeTimer == 3000: # First pipe come after 3 seconds. But after the firt all come after 1.4 seconds
                         self.pipeTimer = 1400 #  millisenconds (changing the timer after the first pipe was released)
                         pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
+                        self.ref = self.pipe.sprites()[0].rect.top - GAP/2 
+                elif event.type == pg.KEYDOWN and event.key == pg.K_q and self.playing == 0: # I 'q' is pressed with the controller playing go to the pause menu
+                    self.pause = 1
 
-            # To be able to move while pressing key continously seperate from new events loop  
-            keys = pg.key.get_pressed()
-            if keys[pg.K_SPACE]: # If space bar is pressed activate jumping flag used in the update method
-                self.bird.sprites()[0].jumping = 1
+            if self.playing == 1: # Check if it playing time or if the user chose the controller to play
+                # To be able to move while pressing key continously seperate from new events loop  
+                keys = pg.key.get_pressed()
+                if keys[pg.K_SPACE]: # If space bar is pressed activate jumping flag used in the update method
+                    self.bird.sprites()[0].jumping = 1
+            else:
+                self.pos = self.bird.sprites()[0].rect.centery # "Measure" bird position   
+                if self.controller.control(self.ref, self.pos) > 0:
+                    self.bird.sprites()[0].jumping = 1
+
+            
 
             # Update Sprites
             self.bird.update()
@@ -191,6 +209,8 @@ class Game():
             self.pipe.draw(self.screen)
             
             self.__draw_base()
+            if self.playing == 0:
+                self.__write_text((SCREEN_WIDHT / 2, BASE_YPOS + 50), "Press 'q' to quit!", (10, 10, 10), self.font)
             self.__draw_score()
 
             pg.display.flip()
@@ -206,8 +226,12 @@ class Game():
 
         # Draw Everything
         self.screen.blit(self.background, (0, 0)) # always draw background to "erase" previous frame
-            
-        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2), "Press c to play", (10, 10, 10), self.font)
+
+        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2 - 50), "Press 'c' and let the controller play!", (10, 10, 10), self.font)
+
+        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2 - 25), "or", (10, 10, 10), self.font)
+
+        self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2), "Press 'p' to play!", (10, 10, 10), self.font)
 
         self.__write_text((SCREEN_WIDHT / 2, SCREEN_HEIGHT / 2 + 50), "Best = "+ str(self.bestScore), (10, 10, 10), self.font)
 
@@ -228,13 +252,21 @@ class Game():
                 elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
                     self.pause = 0
                     self.going = False
-                elif event.type == pg.KEYDOWN and event.key == pg.K_c: # press "c" to continue
-                    self.bird.add(Bird(self.fps))
+                elif event.type == pg.KEYDOWN and event.key == pg.K_p: # press "p" to continue
                     self.pipeTimer = 3000 #  millisenconds
                     pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
                     self.pause = 0
+                    self.playing = 1
+                elif event.type == pg.KEYDOWN and event.key == pg.K_c:
+                    self.pause = 0
+                    self.playing = 0
+                    self.pipeTimer = 3000 #  millisenconds
+                    pg.time.set_timer(self.newPipe,self.pipeTimer) # 1000 miliseconds = 1 seconds
                 elif event.type == self.newPipe:
                     pass
+        
+        self.bird.add(Bird(self.fps)) # Create new bird before going to the game
+
 
     def __check_collision(self):
 
@@ -249,7 +281,8 @@ class Game():
                 if self.pipe.sprites()[0].rect.right < self.bird.sprites()[0].rect.left:
                     self.score +=1
                     self.pipe.sprites()[0].overpast = 1
-
+                    self.ref = self.pipe.sprites()[2].rect.top - GAP/2 # Since a pipe is past new reference is computed
+        
 
         self.__write_text((SCREEN_WIDHT/2, 100), str(self.score),(255,255,255), self.scoreFont)
 
